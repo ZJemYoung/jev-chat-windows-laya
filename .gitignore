@@ -14,6 +14,9 @@ local.properties
 /*.spec
 .pytest_cache/
 
+# Locally pre-downloaded laya checkpoints (hundreds of MB, never publish)
+/.laya-models/
+
 # Machine-specific
 env.ps1
 gradle.properties.local

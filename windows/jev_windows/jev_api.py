@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import time
 import urllib.error
@@ -13,6 +14,11 @@ from .models import Analysis, ChatSnapshot
 
 SYSTEM_ONE_URL = "https://api.typesafe.ai/v1/systemone"
 JEV_MODEL = "jev-latest"
+
+
+def using_local_backend() -> bool:
+    """True when JEV_BACKEND selects the local laya engine, which needs no API key."""
+    return os.environ.get("JEV_BACKEND", "typesafe").strip().lower() in ("laya", "local")
 
 
 class JevApiError(RuntimeError):
@@ -78,6 +84,13 @@ def _number(answers: dict, name: str, *keys: str) -> float | None:
 
 
 def judge(snapshot: ChatSnapshot, relationship: str, key: str) -> Analysis:
+    if using_local_backend():
+        # Local, key-free path (see laya_backend). Imported lazily so the default
+        # TypeSafe path keeps working on machines without laya installed.
+        from .laya_backend import judge as laya_judge
+
+        return laya_judge(snapshot, relationship)
+
     start = time.monotonic()
     response = _post(
         key,

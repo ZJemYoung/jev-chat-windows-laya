@@ -15,7 +15,8 @@ from .config import (
     save_deepseek_api_key,
 )
 from .deepseek_client import DeepSeekError, generate_suggestions
-from .jev_api import judge
+from .dpi import enable_dpi_awareness, ui_scale
+from .jev_api import judge, using_local_backend
 from .models import Analysis, Rect
 from .safety import assert_safe_chat
 from .windows_api import client_rect_on_screen, find_wechat_window
@@ -47,6 +48,19 @@ NEED_LABELS = {
     "care": "被重视",
     "nothing": "无需追加",
 }
+
+# Which engine produces the judgment: the TypeSafe/Jev API (requires a key) or the
+# local laya engine (JEV_BACKEND=laya, no key). Read once, at import time.
+JUDGE_LABEL = "laya(本地)" if using_local_backend() else "Jev"
+
+
+def px(value: float) -> int:
+    """Scale a pixel measurement for the current display DPI (see jev_windows.dpi).
+
+    Coordinates are physical once DPI awareness is on, so hard-coded pixel sizes have
+    to be scaled by hand or the window looks tiny on a 150%+ display.
+    """
+    return int(round(value * ui_scale()))
 
 
 class CalibrationOverlay(tk.Toplevel):
@@ -113,7 +127,7 @@ class SettingsDialog(tk.Toplevel):
         super().__init__(parent)
         self.parent_app = parent
         self.title("设置")
-        self.geometry("560x470")
+        self.geometry(f"{px(560)}x{px(470)}")
         self.transient(parent)
         self.grab_set()
         self.columnconfigure(1, weight=1)
@@ -189,8 +203,11 @@ class JevApp(tk.Tk):
         self.active_window = None
         self.is_analyzing = False
         self.title(f"Jev 微信助手 · Windows v{__version__}")
-        self.geometry("500x760+40+60")
-        self.minsize(450, 680)
+        # Fonts in points follow Tk's scaling, which we pin to the real DPI; window
+        # and wrap sizes are plain pixels and need explicit scaling.
+        self.tk.call("tk", "scaling", ui_scale() * 96.0 / 72.0)
+        self.geometry(f"{px(500)}x{px(760)}+{px(40)}+{px(60)}")
+        self.minsize(px(450), px(680))
         self.attributes("-topmost", True)
         self.configure(bg="#f8fafc")
         self._build_ui()
@@ -216,17 +233,17 @@ class JevApp(tk.Tk):
         self.analyze_button.pack(fill="x", padx=16, pady=8, ipady=7)
 
         self.status = tk.StringVar(value="请先设置 Jev API 密钥并框选聊天区")
-        ttk.Label(self, textvariable=self.status, wraplength=430).pack(fill="x", padx=18, pady=4)
+        ttk.Label(self, textvariable=self.status, wraplength=px(430)).pack(fill="x", padx=18, pady=4)
 
-        self.summary = ttk.LabelFrame(self, text="Jev 判断", padding=12)
+        self.summary = ttk.LabelFrame(self, text=f"{JUDGE_LABEL} 判断", padding=12)
         self.summary.pack(fill="x", padx=16, pady=8)
         self.summary_text = tk.StringVar(value="尚未分析")
-        ttk.Label(self.summary, textvariable=self.summary_text, wraplength=410, justify="left").pack(fill="x")
+        ttk.Label(self.summary, textvariable=self.summary_text, wraplength=px(410), justify="left").pack(fill="x")
 
         self.preview = ttk.LabelFrame(self, text="识别到的最近消息", padding=10)
         self.preview.pack(fill="x", padx=16, pady=8)
         self.preview_text = tk.StringVar(value="—")
-        ttk.Label(self.preview, textvariable=self.preview_text, wraplength=410, justify="left").pack(fill="x")
+        ttk.Label(self.preview, textvariable=self.preview_text, wraplength=px(410), justify="left").pack(fill="x")
 
         self.suggestions = ttk.LabelFrame(self, text="DeepSeek 建议回复（仅供复制，不自动发送）", padding=10)
         self.suggestions.pack(fill="both", expand=True, padx=16, pady=(8, 16))
@@ -254,7 +271,7 @@ class JevApp(tk.Tk):
             messagebox.showinfo("需要校准", "请先框选聊天消息区域。", parent=self)
             return
         key = load_api_key()
-        if not key:
+        if not key and not using_local_backend():
             messagebox.showinfo("需要密钥", "请在设置中保存 Jev / TypeSafe API 密钥。", parent=self)
             return
         self.is_analyzing = True
@@ -283,8 +300,10 @@ class JevApp(tk.Tk):
         relationship = self.settings.relationship
         deepseek_key = load_deepseek_api_key()
         deepseek_model = self.settings.deepseek_model
-        self._show_suggestion_message("等待 Jev 判断…" if deepseek_key else "未配置 DeepSeek API；本次只做 Jev 判断")
-        self.set_status(f"已识别 {len(snapshot.messages)} 条消息，正在调用 Jev 判断…")
+        self._show_suggestion_message(
+            f"等待 {JUDGE_LABEL} 判断…" if deepseek_key else f"未配置 DeepSeek API；本次只做 {JUDGE_LABEL} 判断"
+        )
+        self.set_status(f"已识别 {len(snapshot.messages)} 条消息，正在调用 {JUDGE_LABEL} 判断…")
         threading.Thread(
             target=self._analyze_worker,
             args=(snapshot, key, relationship, deepseek_key, deepseek_model),
@@ -313,9 +332,9 @@ class JevApp(tk.Tk):
             analysis = judge(snapshot, relationship, key)
             self.after(0, lambda: self._show_analysis(analysis))
             if not deepseek_key:
-                self.after(0, lambda: self.set_status("Jev 判断完成；配置 DeepSeek API 后可生成建议回复"))
+                self.after(0, lambda: self.set_status(f"{JUDGE_LABEL} 判断完成；配置 DeepSeek API 后可生成建议回复"))
                 return
-            self.after(0, lambda: self.set_status("Jev 判断完成，正在让 DeepSeek 生成建议回复…"))
+            self.after(0, lambda: self.set_status(f"{JUDGE_LABEL} 判断完成，正在让 DeepSeek 生成建议回复…"))
             try:
                 replies = generate_suggestions(
                     snapshot,
@@ -327,10 +346,10 @@ class JevApp(tk.Tk):
             except DeepSeekError as exc:
                 message = str(exc)
                 self.after(0, lambda message=message: self._show_suggestion_message(message))
-                self.after(0, lambda message=message: self.set_status(f"Jev 判断完成；{message}"))
+                self.after(0, lambda message=message: self.set_status(f"{JUDGE_LABEL} 判断完成；{message}"))
                 return
             self.after(0, lambda: self._show_suggestions(replies))
-            self.after(0, lambda: self.set_status("Jev 判断和 DeepSeek 建议回复已完成"))
+            self.after(0, lambda: self.set_status(f"{JUDGE_LABEL} 判断和 DeepSeek 建议回复已完成"))
         except Exception as exc:
             message = str(exc)
             self.after(0, lambda message=message: self._show_error(message))
@@ -365,7 +384,7 @@ class JevApp(tk.Tk):
     def _show_suggestion_message(self, text: str) -> None:
         for widget in self.suggestions.winfo_children():
             widget.destroy()
-        ttk.Label(self.suggestions, text=text, wraplength=430, justify="left").pack(fill="x", pady=4)
+        ttk.Label(self.suggestions, text=text, wraplength=px(430), justify="left").pack(fill="x", pady=4)
 
     def _show_suggestions(self, replies: list[str]) -> None:
         for widget in self.suggestions.winfo_children():
@@ -373,7 +392,7 @@ class JevApp(tk.Tk):
         for index, reply in enumerate(replies, start=1):
             row = ttk.Frame(self.suggestions)
             row.pack(fill="x", pady=5)
-            ttk.Label(row, text=f"{index}. {reply}", wraplength=360, justify="left").pack(
+            ttk.Label(row, text=f"{index}. {reply}", wraplength=px(360), justify="left").pack(
                 side="left", fill="x", expand=True
             )
             ttk.Button(row, text="复制", command=lambda text=reply: self._copy_reply(text)).pack(
@@ -392,6 +411,9 @@ class JevApp(tk.Tk):
 
 
 def main() -> None:
+    # run.pyw already declared this before Tk existed; repeating is a no-op and
+    # covers callers that import this module directly.
+    enable_dpi_awareness()
     JevApp().mainloop()
 
 
