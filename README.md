@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\start.ps1
 
 ## 相关分支与文档
 
-- **[fix/dpi-awareness](https://github.com/ZJemYoung/jev-chat-windows-laya/tree/fix/dpi-awareness)** —— 只含 DPI 修复的干净分支（3 个文件 / +124 −8），用于向上游提交 PR
+- **[fix/dpi-awareness](https://github.com/ZJemYoung/332_lab-jev-chat/tree/fix/dpi-awareness)**（在 fork 里）—— 只含 DPI 修复的干净分支：4 个文件 / +166 −8，含单元测试，用于向上游提交 PR
 - **[FORK-NOTES.md](FORK-NOTES.md)** —— 改动清单、动机、完整证据、已知限制、归属与 AI 辅助声明
 - 上游项目：[Liyucheng1997/332_lab-jev-chat](https://github.com/Liyucheng1997/332_lab-jev-chat)（MIT）
 - 本地判断引擎：[NandhaKishorM/laya](https://github.com/NandhaKishorM/laya)（Apache-2.0）
