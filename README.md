@@ -1,15 +1,105 @@
 # jev-chat-windows-laya
 
-Windows 版微信聊天副驾（上游 fork）：本地 laya 判断引擎免密钥运行 + 修复高缩放屏抓取错位
-Windows fork of jev-chat: key-free local laya judge + DPI-aware screen capture fix
+**Windows 版微信聊天副驾（上游 fork）**：本地 laya 判断引擎免密钥运行 + 修复高缩放屏抓取错位
+*Windows fork of jev-chat: key-free local laya judge + DPI-aware screen capture fix*
+
+<p>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <img alt="Platform: Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6.svg">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3772AB.svg">
+  <a href="https://github.com/Liyucheng1997/332_lab-jev-chat"><img alt="Fork of 332_lab-jev-chat" src="https://img.shields.io/badge/fork%20of-332__lab--jev--chat-8A2BE2.svg"></a>
+  <a href="https://github.com/ZJemYoung/jev-chat-windows-laya/releases/tag/v1.1.0-laya.1"><img alt="Release" src="https://img.shields.io/badge/release-v1.1.0--laya.1-success.svg"></a>
+</p>
 
 > 本仓库是 [Liyucheng1997/332_lab-jev-chat](https://github.com/Liyucheng1997/332_lab-jev-chat)（MIT）的 fork，
-> 仅改动 Windows 桌面版：新增**本地 [laya](https://github.com/NandhaKishorM/laya) 判断后端**（`JEV_BACKEND=laya`，**无需 TypeSafe 密钥**）、
-> 修复 DPI 感知缺失导致的高缩放屏抓取错位。详见 [FORK-NOTES.md](FORK-NOTES.md)。
->
-> 下表及以下内容为**上游项目原文**，未作改动。
+> **仅改动 Windows 桌面版**：上游的 Android 工程、题目集与全部原始代码保持原样。
+> 每处改动的依据、证据与实测数据见 **[FORK-NOTES.md](FORK-NOTES.md)**。
 
 ---
+
+## 这个 fork 做了什么
+
+| | 问题 | 症状 | 本 fork 的处理 |
+|---|---|---|---|
+| 🔴 | **高缩放屏上抓错屏幕区域** | 在 150% / 175% 缩放的显示器上点「分析当前微信对话」，读到的不是聊天内容 | ✅ **已修复**：声明进程 DPI 感知，让坐标与截图统一为物理像素；界面尺寸同步按缩放换算 |
+| 🟡 | **拿不到 TypeSafe Jev 密钥** | TypeSafe 直连处于 waitlist，没有密钥时一步都走不动 | ➕ **可选**：`JEV_BACKEND=laya` 切换到本地开源判断引擎，无需密钥、正文不出本机（⚠️ 中文准确率不足，默认不启用） |
+| 🟡 | **UIA 判据过宽** | 框选过宽时会把微信内部窗口名当作聊天文本 | 📝 已定位并记录，未修（见 [FORK-NOTES](FORK-NOTES.md) 第 2.3 节） |
+
+### 为什么第一个问题必须修
+
+```
+进程未声明 DPI 感知时：
+  Win32 给出的矩形    逻辑坐标  1042x848  @(1107,130)    ← 程序拿它去裁剪
+  ImageGrab 截到的图  物理像素 1824x1484  @(1937,228)    ← 实际截的是这张
+  比值 1.750（主屏 3840x2160 @175% 缩放）
+```
+
+后果不只是「功能坏了」：**错误的截取区域会把无关的屏幕内容当作聊天，发送给已配置的 TypeSafe / DeepSeek**。
+而微信 4.x 不向 UI Automation 暴露聊天文本、OCR 是唯一采集路径，所以在缩放屏上这个缺陷**必然触发**。
+
+### 效果
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| 框选的聊天区 | ❌ 截到屏幕别处（实测读到浏览器、编辑器的文字） | ✅ 截到的就是聊天区 |
+| 界面尺寸（175% 缩放） | — | 窗口 875×1330、`tk scaling` 2.332，比例正常 |
+| 上游单元测试 | — | 14 / 14 通过 |
+
+> 📷 **实机截图位**（建议自行补充两张，点进仓库的人最容易被打动）：
+> 把图片直接拖进 GitHub 的 README 编辑器即可自动上传并插入链接。建议放「框选聊天区」界面与「判断 + 建议回复」结果面板各一张。
+
+## 快速开始
+
+```powershell
+git clone https://github.com/ZJemYoung/jev-chat-windows-laya.git
+cd jev-chat-windows-laya
+powershell -ExecutionPolicy Bypass -File .\windows\install.ps1   # 建 venv 并安装依赖
+powershell -ExecutionPolicy Bypass -File .\windows\start.ps1     # 启动
+```
+
+首次使用：打开电脑版微信并进入一个文字聊天 → 点「**框选聊天区**」只框消息气泡 → 点「**分析当前微信对话**」。
+
+> **升级提示**：修复后坐标系由逻辑像素改为物理像素，旧版本里框选过的请**重新框选一次**。
+> 另：上游脚本写的是 Python 3.11，本机实测 Python 3.12 也能正常工作。
+
+## 可选：用本地 laya 引擎替代 TypeSafe Jev
+
+```powershell
+$env:JEV_BACKEND = 'laya'                # 默认仍是 typesafe，不设即不用
+$env:JEV_LAYA_MODEL = 'multilingual'     # multilingual(默认) / typed-decisions / english / router
+powershell -ExecutionPolicy Bypass -File .\windows\start.ps1
+```
+
+**但请先看实测数据**（5 个手写中文场景，期望标签预先写定）：
+
+| 配置 | 意图命中 | 不同意图数 | 危险度跨度(0-9) |
+|---|---|---|---|
+| `multilingual` + 本项目 7 题（默认 token 预算） | 2/5 | 2/5 | 0.84 |
+| `multilingual` + 提高 token 预算 | 1/5 | 1/5 | 0.17 |
+| `multilingual` + laya 自带预设 / 短 schema | tone 2/5 | 2 | — |
+| `typed-decisions` + 本项目 7 题 | 2/5 | 3/5 | 1.07（方向相反） |
+
+典型失败：一句明显在生气指责的话，被以 **0.94 的置信度**判为「轻松闲聊」。
+结论——**基础 checkpoint 在中文聊天判断上不可用**（与 laya 自述「价值在微调」一致），
+因此默认后端仍是 TypeSafe。想用本地引擎，建议按 laya 官方 notebook 在自己的数据上微调后再用。
+
+## 相关分支与文档
+
+- **[fix/dpi-awareness](https://github.com/ZJemYoung/jev-chat-windows-laya/tree/fix/dpi-awareness)** —— 只含 DPI 修复的干净分支（3 个文件 / +124 −8），用于向上游提交 PR
+- **[FORK-NOTES.md](FORK-NOTES.md)** —— 改动清单、动机、完整证据、已知限制、归属与 AI 辅助声明
+- 上游项目：[Liyucheng1997/332_lab-jev-chat](https://github.com/Liyucheng1997/332_lab-jev-chat)（MIT）
+- 本地判断引擎：[NandhaKishorM/laya](https://github.com/NandhaKishorM/laya)（Apache-2.0）
+
+## 边界与免责
+
+本项目读取**你自己设备上、你自己有权查看**的聊天；只提供「复制建议」，**不含任何自动发送路径**，
+并在检测到转账 / 红包 / 收款 / 支付等词时拒绝分析。使用第三方 API 时（TypeSafe / DeepSeek），
+框选区域内的文字会发往对应服务；改用本地 laya 引擎时正文不出本机。请遵守相关软件的许可协议与当地法律法规。
+
+---
+
+<details>
+<summary><b>上游项目 README 原文（未作改动，点击展开）</b></summary>
 
 # Jev 聊天助手 (Jev Chat Assistant)
 
@@ -164,3 +254,12 @@ powershell -ExecutionPolicy Bypass -File .\windows\build.ps1
 </tr></table>
 
 二维码 7 天有效（本批到 2026-09-28），过期了请开一个 [issue](https://github.com/Finderchangchang/jev-chat-JARVIS/issues) 留言，会更新。
+
+</details>
+
+---
+
+<p align="center"><sub>
+本仓库为 <a href="https://github.com/Liyucheng1997/332_lab-jev-chat">332_lab-jev-chat</a> 的 fork（MIT）。
+上游版权归原作者所有；本 fork 的改动说明见 <a href="FORK-NOTES.md">FORK-NOTES.md</a>。
+</sub></p>
