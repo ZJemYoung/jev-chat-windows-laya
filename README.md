@@ -1,3 +1,16 @@
+# jev-chat-windows-laya
+
+Windows 版微信聊天副驾（上游 fork）：本地 laya 判断引擎免密钥运行 + 修复高缩放屏抓取错位
+Windows fork of jev-chat: key-free local laya judge + DPI-aware screen capture fix
+
+> 本仓库是 [Liyucheng1997/332_lab-jev-chat](https://github.com/Liyucheng1997/332_lab-jev-chat)（MIT）的 fork，
+> 仅改动 Windows 桌面版：新增**本地 [laya](https://github.com/NandhaKishorM/laya) 判断后端**（`JEV_BACKEND=laya`，**无需 TypeSafe 密钥**）、
+> 修复 DPI 感知缺失导致的高缩放屏抓取错位。详见 [FORK-NOTES.md](FORK-NOTES.md)。
+>
+> 下表及以下内容为**上游项目原文**，未作改动。
+
+---
+
 # Jev 聊天助手 (Jev Chat Assistant)
 
 一个**非侵入式**的实时对话理解与回复辅助层——挂在任意聊天窗口旁边，读懂对方在说什么，用 [TypeSafe **Jev**](https://typesafe.ai/) 判断模型给出「对方真实意图 / 危险等级 / 该不该马上回 / 最佳动作」，再用一个生成式模型起草 3 条候选回复并让 Jev 排序，最后以半透明悬浮窗展示，一键**填入**输入框。
